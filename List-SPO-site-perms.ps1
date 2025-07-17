@@ -155,8 +155,6 @@ if (-not (Get-Module -ListAvailable -Name Microsoft.Graph)) {
 }
 Import-Module Microsoft.Graph
 
-# Enhanced authentication section - replace lines 157-197 with this:
-
 # Connect to Microsoft Graph
 try {
     # Check authentication methods in order of preference
@@ -318,16 +316,6 @@ try {
     
 } catch {
     Write-Output "FATAL ERROR: Failed to connect to Microsoft Graph: $_"
-    Write-Output "Error details: $($_.Exception.Message)"
-    exit 1
-}
-    
-    if ($VerboseOutput) {
-        Write-Output "Graph context: Account=$($context.Account), Scopes=$($context.Scopes -join ', ')"
-    }
-    
-} catch {
-    Write-Output "Failed to connect to Microsoft Graph: $_"
     Write-Output "Error details: $($_.Exception.Message)"
     exit 1
 }
