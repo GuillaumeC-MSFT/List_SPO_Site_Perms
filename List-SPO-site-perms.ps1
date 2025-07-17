@@ -27,9 +27,22 @@
 .EXAMPLE
     .\List-SPO-site-perms.ps1 -SiteUrl "https://contoso.sharepoint.com/sites/example" -OutputCsv "permissions.csv" -VerboseOutput
 
+.EXAMPLE
+    .\List-SPO-site-perms.ps1 -SiteUrl "https://contoso.sharepoint.com/sites/example" -ClientId "12345678-1234-1234-1234-123456789012" -TenantId "87654321-4321-4321-4321-210987654321" -ClientSecret "your-client-secret"
+
+.EXAMPLE
+    # Using existing global token
+    $global:graphAPIToken = "your-access-token-here"
+    .\List-SPO-site-perms.ps1 -SiteUrl "https://contoso.sharepoint.com/sites/example"
+
 .NOTES
     Requires Microsoft.Graph PowerShell module
     Requires Sites.Read.All, Files.Read.All, User.Read.All permissions
+    
+    Authentication Methods (in order of preference):
+    1. Global token ($global:graphAPIToken) - Uses existing access token
+    2. App registration (ClientId, TenantId, ClientSecret) - Non-interactive
+    3. Interactive authentication - Prompts for user login
 #>
 
 param (
@@ -49,7 +62,16 @@ param (
     
     [Parameter(HelpMessage="Maximum folder depth to recurse")]
     [ValidateRange(1, 50)]
-    [int]$MaxDepth = 10
+    [int]$MaxDepth = 10,
+    
+    [Parameter(HelpMessage="Application (Client) ID for app registration authentication")]
+    [string]$ClientId,
+    
+    [Parameter(HelpMessage="Tenant ID for app registration authentication")]
+    [string]$TenantId,
+    
+    [Parameter(HelpMessage="Client secret for app registration authentication")]
+    [string]$ClientSecret
 )
 
 # Initialize variables
@@ -128,8 +150,31 @@ Import-Module Microsoft.Graph
 
 # Connect to Microsoft Graph
 try {
-    Connect-MgGraph -Scopes "Sites.Read.All", "Files.Read.All", "User.Read.All"
-    Write-Host "Connected to Microsoft Graph." -ForegroundColor Green
+    # Check authentication methods in order of preference
+    if ($global:graphAPIToken) {
+        # Method 1: Use existing global token
+        Write-Host "Connecting to Microsoft Graph using existing token..." -ForegroundColor Yellow
+        $secureToken = ConvertTo-SecureString $global:graphAPIToken -AsPlainText -Force
+        Connect-MgGraph -AccessToken $secureToken -NoWelcome
+        Write-Host "Connected to Microsoft Graph using existing token." -ForegroundColor Green
+    } elseif ($ClientId -and $TenantId -and $ClientSecret) {
+        # Method 2: App registration with client secret
+        Write-Host "Connecting to Microsoft Graph using app registration..." -ForegroundColor Yellow
+        
+        # Convert client secret to secure string
+        $secureClientSecret = ConvertTo-SecureString $ClientSecret -AsPlainText -Force
+        $clientCredential = New-Object System.Management.Automation.PSCredential($ClientId, $secureClientSecret)
+        
+        # Connect using client credentials
+        Connect-MgGraph -TenantId $TenantId -ClientSecretCredential $clientCredential -NoWelcome
+        
+        Write-Host "Connected to Microsoft Graph using app registration." -ForegroundColor Green
+    } else {
+        # Method 3: Interactive authentication (existing behavior)
+        Write-Host "Connecting to Microsoft Graph interactively..." -ForegroundColor Yellow
+        Connect-MgGraph -Scopes "Sites.Read.All", "Files.Read.All", "User.Read.All"
+        Write-Host "Connected to Microsoft Graph." -ForegroundColor Green
+    }
 } catch {
     Write-Host "Failed to connect to Microsoft Graph: $_" -ForegroundColor Red
     exit 1
