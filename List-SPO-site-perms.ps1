@@ -136,13 +136,13 @@ function Get-FilesRecursively {
             } elseif ($item.Folder -and $CurrentDepth -lt $MaxDepth) {
                 # It's a folder - recurse into it
                 if ($VerboseOutput) {
-                    Write-Console "  Scanning folder: $($item.Name) (depth: $($CurrentDepth + 1))"
+                    Write-Output "  Scanning folder: $($item.Name) (depth: $($CurrentDepth + 1))"
                 }
                 $allFiles += Get-FilesRecursively -DriveId $DriveId -ParentId $item.Id -CurrentDepth ($CurrentDepth + 1) -MaxDepth $MaxDepth
             }
         }
     } catch {
-        Write-Console "Failed to retrieve items at depth $CurrentDepth`: $_"
+        Write-Output "Failed to retrieve items at depth $CurrentDepth`: $_"
     }
     
     return $allFiles
@@ -150,7 +150,7 @@ function Get-FilesRecursively {
 
 # Ensure Microsoft Graph module is installed
 if (-not (Get-Module -ListAvailable -Name Microsoft.Graph)) {
-    Write-Console "Installing Microsoft.Graph module..."
+    Write-Output "Installing Microsoft.Graph module..."
     Install-Module Microsoft.Graph -Scope CurrentUser -Force -AllowClobber
 }
 Import-Module Microsoft.Graph
@@ -160,13 +160,13 @@ try {
     # Check authentication methods in order of preference
     if ($global:graphAPIToken) {
         # Method 1: Use existing global token
-        Write-Console "Connecting to Microsoft Graph using existing token..."
+        Write-Output "Connecting to Microsoft Graph using existing token..."
         $secureToken = ConvertTo-SecureString $global:graphAPIToken -AsPlainText -Force
         Connect-MgGraph -AccessToken $secureToken -NoWelcome
-        Write-Console "Connected to Microsoft Graph using existing token."
+        Write-Output "Connected to Microsoft Graph using existing token."
     } elseif ($ClientId -and $TenantId -and $ClientSecret) {
         # Method 2: App registration with client secret
-        Write-Console "Connecting to Microsoft Graph using app registration..."
+        Write-Output "Connecting to Microsoft Graph using app registration..."
         
         # Convert client secret to secure string
         $secureClientSecret = ConvertTo-SecureString $ClientSecret -AsPlainText -Force
@@ -178,39 +178,39 @@ try {
         # Verify the connection worked
         $context = Get-MgContext
         if (-not $context -or -not $context.Account) {
-            Write-Console "Failed to authenticate with app registration. Please check your ClientId, TenantId, and ClientSecret."
-            Write-Console "Make sure the app registration has the required permissions (Sites.Read.All, Files.Read.All, User.Read.All) and admin consent is granted."
+            Write-Output "Failed to authenticate with app registration. Please check your ClientId, TenantId, and ClientSecret."
+            Write-Output "Make sure the app registration has the required permissions (Sites.Read.All, Files.Read.All, User.Read.All) and admin consent is granted."
             exit 1
         }
         
-        Write-Console "Connected to Microsoft Graph using app registration."
+        Write-Output "Connected to Microsoft Graph using app registration."
     } else {
         # Method 3: Interactive authentication (existing behavior)
-        Write-Console "Connecting to Microsoft Graph interactively..."
+        Write-Output "Connecting to Microsoft Graph interactively..."
         Connect-MgGraph -Scopes "Sites.Read.All", "Files.Read.All", "User.Read.All"
-        Write-Console "Connected to Microsoft Graph."
+        Write-Output "Connected to Microsoft Graph."
     }
     
     # Final verification that we're connected
     $context = Get-MgContext
     if (-not $context -or -not $context.Account) {
-        Write-Console "Failed to establish Microsoft Graph connection."
+        Write-Output "Failed to establish Microsoft Graph connection."
         exit 1
     }
     
     if ($VerboseOutput) {
-        Write-Console "Graph context: Account=$($context.Account), Scopes=$($context.Scopes -join ', ')"
+        Write-Output "Graph context: Account=$($context.Account), Scopes=$($context.Scopes -join ', ')"
     }
     
 } catch {
-    Write-Console "Failed to connect to Microsoft Graph: $_"
-    Write-Console "Error details: $($_.Exception.Message)"
+    Write-Output "Failed to connect to Microsoft Graph: $_"
+    Write-Output "Error details: $($_.Exception.Message)"
     exit 1
 }
 
 # Validate Site URL
 if ([string]::IsNullOrWhiteSpace($SiteUrl)) {
-    Write-Console "No SharePoint site URL provided. Exiting."
+    Write-Output "No SharePoint site URL provided. Exiting."
     exit 1
 }
 
@@ -218,7 +218,7 @@ try {
     $uri = [System.Uri]$SiteUrl
     $sitePath = $uri.AbsolutePath.TrimStart("/")
 } catch {
-    Write-Console "Invalid site URL format. Exiting."
+    Write-Output "Invalid site URL format. Exiting."
     exit 1
 }
 
@@ -235,65 +235,65 @@ try {
     }
 
     if (-not $site) {
-        Write-Console "Site not found. Please check the URL and try again."
+        Write-Output "Site not found. Please check the URL and try again."
         exit 1
     }
 } catch {
     if ($_.Exception.Message -match "401|Unauthorized") {
-        Write-Console "Access denied (401 Unauthorized)"
-        Write-Console "This typically means the authentication succeeded but your app registration lacks the required permissions."
-        Write-Console ""
-        Write-Console "To fix this issue:"
-        Write-Console "1. Go to Azure Portal → App Registrations → [Your App] → API Permissions"
-        Write-Console "2. Ensure these APPLICATION permissions are added:"
-        Write-Console "   • Sites.Read.All"
-        Write-Console "   • Files.Read.All"
-        Write-Console "   • User.Read.All"
-        Write-Console "3. Click 'Grant admin consent for [your organization]'"
-        Write-Console "4. Wait a few minutes for permissions to propagate"
-        Write-Console ""
-        Write-Console "Current authentication context:"
+        Write-Output "Access denied (401 Unauthorized)"
+        Write-Output "This typically means the authentication succeeded but your app registration lacks the required permissions."
+        Write-Output ""
+        Write-Output "To fix this issue:"
+        Write-Output "1. Go to Azure Portal → App Registrations → [Your App] → API Permissions"
+        Write-Output "2. Ensure these APPLICATION permissions are added:"
+        Write-Output "   • Sites.Read.All"
+        Write-Output "   • Files.Read.All"
+        Write-Output "   • User.Read.All"
+        Write-Output "3. Click 'Grant admin consent for [your organization]'"
+        Write-Output "4. Wait a few minutes for permissions to propagate"
+        Write-Output ""
+        Write-Output "Current authentication context:"
         $context = Get-MgContext -ErrorAction SilentlyContinue
         if ($context) {
-            Write-Console "   • Account: $($context.Account)"
-            Write-Console "   • Auth Type: $($context.AuthType)"
-            Write-Console "   • Scopes: $($context.Scopes -join ', ')"
-            Write-Console "   • Tenant ID: $($context.TenantId)"
+            Write-Output "   • Account: $($context.Account)"
+            Write-Output "   • Auth Type: $($context.AuthType)"
+            Write-Output "   • Scopes: $($context.Scopes -join ', ')"
+            Write-Output "   • Tenant ID: $($context.TenantId)"
         }
-        Write-Console ""
-        Write-Console "Note: Application permissions require admin consent and may take time to propagate."
+        Write-Output ""
+        Write-Output "Note: Application permissions require admin consent and may take time to propagate."
     } else {
-        Write-Console "Failed to retrieve site: $_"
-        Write-Console "Error details: $($_.Exception.Message)"
+        Write-Output "Failed to retrieve site: $_"
+        Write-Output "Error details: $($_.Exception.Message)"
     }
     exit 1
 }
 $siteId = $site.Id
-Write-Console "Found site: $($site.DisplayName) (ID: $siteId)"
+Write-Output "Found site: $($site.DisplayName) (ID: $siteId)"
 
 # Get Document Libraries (Drives)
 $drives = Get-MgSiteDrive -SiteId $siteId
 if ($null -eq $drives -or $drives.Count -eq 0) {
-    Write-Console "No document libraries found in this site."
+    Write-Output "No document libraries found in this site."
     exit 1
 }
 if ($VerboseOutput) {
-    Write-Console "Document libraries found:"
-    $drives | ForEach-Object { Write-Console "Drive: $($_.Name) (ID: $($_.Id))" }
+    Write-Output "Document libraries found:"
+    $drives | ForEach-Object { Write-Output "Drive: $($_.Name) (ID: $($_.Id))" }
 }
 
 # Use ArrayList for better performance
 $results = [System.Collections.ArrayList]::new()
 
 foreach ($drive in $drives) {
-    if ($VerboseOutput) { Write-Console "Processing drive: $($drive.Name)" }
+    if ($VerboseOutput) { Write-Output "Processing drive: $($drive.Name)" }
     
     try {
         # Get all files recursively
         $allFiles = Get-FilesRecursively -DriveId $drive.Id -MaxDepth $MaxDepth
         
         if ($allFiles.Count -eq 0) {
-            Write-Console "No files found in drive: $($drive.Name)"
+            Write-Output "No files found in drive: $($drive.Name)"
             continue
         }
         
@@ -303,11 +303,11 @@ foreach ($drive in $drives) {
             $processedFiles++
             
             if ($VerboseOutput) { 
-                Write-Console "Checking file: $($file.Name) ($fileCount/$($allFiles.Count))"
+                Write-Output "Checking file: $($file.Name) ($fileCount/$($allFiles.Count))"
             } else {
                 # Show progress for non-verbose mode
                 if ($fileCount % 10 -eq 0) {
-                    Write-Console "Processed $fileCount/$($allFiles.Count) files in $($drive.Name)..."
+                    Write-Output "Processed $fileCount/$($allFiles.Count) files in $($drive.Name)..."
                 }
             }
             
@@ -361,35 +361,35 @@ foreach ($drive in $drives) {
                         })
                         
                         if ($VerboseOutput) {
-                            Write-Console ("Permission details for $($file.Name): " + ($perm | ConvertTo-Json -Depth 10))
+                            Write-Output ("Permission details for $($file.Name): " + ($perm | ConvertTo-Json -Depth 10))
                         }
                     }
                 }
             } catch {
-                Write-Console "Failed to retrieve permissions for file $($file.Name): $_"
+                Write-Output "Failed to retrieve permissions for file $($file.Name): $_"
                 continue
             }
         }
     } catch {
-        Write-Console "Failed to process drive $($drive.Name): $_"
+        Write-Output "Failed to process drive $($drive.Name): $_"
         continue
     }
 }
 
 if ($results.Count -eq 0) {
-    Write-Console "No sharing permissions found in this site."
+    Write-Output "No sharing permissions found in this site."
 } else {
     $results | Export-Csv -Path $OutputCsv -NoTypeInformation -Encoding UTF8
-    Write-Console "Export complete. File saved as $OutputCsv"
+    Write-Output "Export complete. File saved as $OutputCsv"
     
     # Display summary statistics
     $endTime = Get-Date
     $duration = $endTime - $startTime
-    Write-Console ""
-    Write-Console "Summary Statistics:"
-    Write-Console "• Total files processed: $processedFiles"
-    Write-Console "• Total permissions found: $totalPermissions"
-    Write-Console "• Document libraries scanned: $($drives.Count)"
-    Write-Console "• Processing time: $($duration.TotalMinutes.ToString('F1')) minutes"
-    Write-Console "• Scan timestamp: $($startTime.ToString('yyyy-MM-dd HH:mm:ss'))"
+    Write-Output ""
+    Write-Output "Summary Statistics:"
+    Write-Output "• Total files processed: $processedFiles"
+    Write-Output "• Total permissions found: $totalPermissions"
+    Write-Output "• Document libraries scanned: $($drives.Count)"
+    Write-Output "• Processing time: $($duration.TotalMinutes.ToString('F1')) minutes"
+    Write-Output "• Scan timestamp: $($startTime.ToString('yyyy-MM-dd HH:mm:ss'))"
 }
