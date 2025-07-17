@@ -95,7 +95,7 @@ function Get-FilesRecursively {
             $items = Get-MgDriveItem -DriveId $DriveId -DriveItemId $ParentId -ExpandProperty "children" -ErrorAction Stop
             $children = $items.Children
         } else {
-            $children = Get-MgDriveItem -DriveId $DriveId -ErrorAction Stop
+            $children = Get-MgDriveItem -DriveId $DriveId -Filter "file ne null or folder ne null" -ErrorAction Stop
         }
         
         foreach ($item in $children) {
