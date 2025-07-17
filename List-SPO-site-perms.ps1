@@ -43,6 +43,13 @@
     1. Global token ($global:graphAPIToken) - Uses existing access token
     2. App registration (ClientId, TenantId, ClientSecret) - Non-interactive
     3. Interactive authentication - Prompts for user login
+    
+    Troubleshooting App Registration Issues:
+    - Ensure APPLICATION permissions are granted (not delegated)
+    - Admin consent must be granted for all permissions
+    - Wait 5-10 minutes after granting consent for permissions to propagate
+    - Verify the app registration is in the correct tenant
+    - Check that the client secret hasn't expired
 #>
 
 param (
@@ -129,13 +136,13 @@ function Get-FilesRecursively {
             } elseif ($item.Folder -and $CurrentDepth -lt $MaxDepth) {
                 # It's a folder - recurse into it
                 if ($VerboseOutput) {
-                    Write-Host "  Scanning folder: $($item.Name) (depth: $($CurrentDepth + 1))" -ForegroundColor DarkYellow
+                    Write-Console "  Scanning folder: $($item.Name) (depth: $($CurrentDepth + 1))"
                 }
                 $allFiles += Get-FilesRecursively -DriveId $DriveId -ParentId $item.Id -CurrentDepth ($CurrentDepth + 1) -MaxDepth $MaxDepth
             }
         }
     } catch {
-        Write-Host "Failed to retrieve items at depth $CurrentDepth`: $_" -ForegroundColor Red
+        Write-Console "Failed to retrieve items at depth $CurrentDepth`: $_"
     }
     
     return $allFiles
@@ -143,7 +150,7 @@ function Get-FilesRecursively {
 
 # Ensure Microsoft Graph module is installed
 if (-not (Get-Module -ListAvailable -Name Microsoft.Graph)) {
-    Write-Host "Installing Microsoft.Graph module..." -ForegroundColor Yellow
+    Write-Console "Installing Microsoft.Graph module..."
     Install-Module Microsoft.Graph -Scope CurrentUser -Force -AllowClobber
 }
 Import-Module Microsoft.Graph
@@ -153,13 +160,13 @@ try {
     # Check authentication methods in order of preference
     if ($global:graphAPIToken) {
         # Method 1: Use existing global token
-        Write-Host "Connecting to Microsoft Graph using existing token..." -ForegroundColor Yellow
+        Write-Console "Connecting to Microsoft Graph using existing token..."
         $secureToken = ConvertTo-SecureString $global:graphAPIToken -AsPlainText -Force
         Connect-MgGraph -AccessToken $secureToken -NoWelcome
-        Write-Host "Connected to Microsoft Graph using existing token." -ForegroundColor Green
+        Write-Console "Connected to Microsoft Graph using existing token."
     } elseif ($ClientId -and $TenantId -and $ClientSecret) {
         # Method 2: App registration with client secret
-        Write-Host "Connecting to Microsoft Graph using app registration..." -ForegroundColor Yellow
+        Write-Console "Connecting to Microsoft Graph using app registration..."
         
         # Convert client secret to secure string
         $secureClientSecret = ConvertTo-SecureString $ClientSecret -AsPlainText -Force
@@ -167,41 +174,43 @@ try {
         
         # Connect using client credentials
         Connect-MgGraph -TenantId $TenantId -ClientSecretCredential $clientCredential -NoWelcome
-     
+        
         # Verify the connection worked
         $context = Get-MgContext
         if (-not $context -or -not $context.Account) {
-            Write-Host "Failed to authenticate with app registration. Please check your ClientId, TenantId, and ClientSecret." -ForegroundColor Red
-            Write-Host "Make sure the app registration has the required permissions (Sites.Read.All, Files.Read.All, User.Read.All) and admin consent is granted." -ForegroundColor Yellow
+            Write-Console "Failed to authenticate with app registration. Please check your ClientId, TenantId, and ClientSecret."
+            Write-Console "Make sure the app registration has the required permissions (Sites.Read.All, Files.Read.All, User.Read.All) and admin consent is granted."
             exit 1
         }
         
-        Write-Host "Connected to Microsoft Graph using app registration." -ForegroundColor Green
+        Write-Console "Connected to Microsoft Graph using app registration."
     } else {
         # Method 3: Interactive authentication (existing behavior)
-        Write-Host "Connecting to Microsoft Graph interactively..." -ForegroundColor Yellow
+        Write-Console "Connecting to Microsoft Graph interactively..."
         Connect-MgGraph -Scopes "Sites.Read.All", "Files.Read.All", "User.Read.All"
-        Write-Host "Connected to Microsoft Graph." -ForegroundColor Green
+        Write-Console "Connected to Microsoft Graph."
     }
-   # Final verification that we're connected
+    
+    # Final verification that we're connected
     $context = Get-MgContext
     if (-not $context -or -not $context.Account) {
-        Write-Host "Failed to establish Microsoft Graph connection." -ForegroundColor Red
+        Write-Console "Failed to establish Microsoft Graph connection."
         exit 1
     }
     
     if ($VerboseOutput) {
-        Write-Host "Graph context: Account=$($context.Account), Scopes=$($context.Scopes -join ', ')" -ForegroundColor DarkGray
+        Write-Console "Graph context: Account=$($context.Account), Scopes=$($context.Scopes -join ', ')"
     }
     
 } catch {
-    Write-Host "Failed to connect to Microsoft Graph: $_" -ForegroundColor Red
+    Write-Console "Failed to connect to Microsoft Graph: $_"
+    Write-Console "Error details: $($_.Exception.Message)"
     exit 1
 }
 
 # Validate Site URL
 if ([string]::IsNullOrWhiteSpace($SiteUrl)) {
-    Write-Host "No SharePoint site URL provided. Exiting." -ForegroundColor Red
+    Write-Console "No SharePoint site URL provided. Exiting."
     exit 1
 }
 
@@ -209,51 +218,82 @@ try {
     $uri = [System.Uri]$SiteUrl
     $sitePath = $uri.AbsolutePath.TrimStart("/")
 } catch {
-    Write-Host "Invalid site URL format. Exiting." -ForegroundColor Red
+    Write-Console "Invalid site URL format. Exiting."
     exit 1
 }
 
 $hostname = $uri.Hostname
 
 # Get Site Object
-# Try to get the site directly by URL
-$site = Get-MgSite -Search "${hostname}:${sitePath}" | Where-Object { $_.WebUrl -eq $SiteUrl }
+try {
+    # Try to get the site directly by URL
+    $site = Get-MgSite -Search "${hostname}:${sitePath}" | Where-Object { $_.WebUrl -eq $SiteUrl }
 
-if (-not $site) {
-    # Fallback: try searching by hostname only
-    $site = Get-MgSite -Search $hostname | Where-Object { $_.WebUrl -eq $SiteUrl }
-}
+    if (-not $site) {
+        # Fallback: try searching by hostname only
+        $site = Get-MgSite -Search $hostname | Where-Object { $_.WebUrl -eq $SiteUrl }
+    }
 
-if (-not $site) {
-    Write-Host "Site not found. Please check the URL and try again." -ForegroundColor Red
+    if (-not $site) {
+        Write-Console "Site not found. Please check the URL and try again."
+        exit 1
+    }
+} catch {
+    if ($_.Exception.Message -match "401|Unauthorized") {
+        Write-Console "Access denied (401 Unauthorized)"
+        Write-Console "This typically means the authentication succeeded but your app registration lacks the required permissions."
+        Write-Console ""
+        Write-Console "To fix this issue:"
+        Write-Console "1. Go to Azure Portal → App Registrations → [Your App] → API Permissions"
+        Write-Console "2. Ensure these APPLICATION permissions are added:"
+        Write-Console "   • Sites.Read.All"
+        Write-Console "   • Files.Read.All"
+        Write-Console "   • User.Read.All"
+        Write-Console "3. Click 'Grant admin consent for [your organization]'"
+        Write-Console "4. Wait a few minutes for permissions to propagate"
+        Write-Console ""
+        Write-Console "Current authentication context:"
+        $context = Get-MgContext -ErrorAction SilentlyContinue
+        if ($context) {
+            Write-Console "   • Account: $($context.Account)"
+            Write-Console "   • Auth Type: $($context.AuthType)"
+            Write-Console "   • Scopes: $($context.Scopes -join ', ')"
+            Write-Console "   • Tenant ID: $($context.TenantId)"
+        }
+        Write-Console ""
+        Write-Console "Note: Application permissions require admin consent and may take time to propagate."
+    } else {
+        Write-Console "Failed to retrieve site: $_"
+        Write-Console "Error details: $($_.Exception.Message)"
+    }
     exit 1
 }
 $siteId = $site.Id
-Write-Host "Found site: $($site.DisplayName) (ID: $siteId)" -ForegroundColor Green
+Write-Console "Found site: $($site.DisplayName) (ID: $siteId)"
 
 # Get Document Libraries (Drives)
 $drives = Get-MgSiteDrive -SiteId $siteId
 if ($null -eq $drives -or $drives.Count -eq 0) {
-    Write-Host "No document libraries found in this site." -ForegroundColor Red
+    Write-Console "No document libraries found in this site."
     exit 1
 }
 if ($VerboseOutput) {
-    Write-Host "Document libraries found:" -ForegroundColor Cyan
-    $drives | ForEach-Object { Write-Host "Drive: $($_.Name) (ID: $($_.Id))" -ForegroundColor Cyan }
+    Write-Console "Document libraries found:"
+    $drives | ForEach-Object { Write-Console "Drive: $($_.Name) (ID: $($_.Id))" }
 }
 
 # Use ArrayList for better performance
 $results = [System.Collections.ArrayList]::new()
 
 foreach ($drive in $drives) {
-    if ($VerboseOutput) { Write-Host "Processing drive: $($drive.Name)" -ForegroundColor Magenta }
+    if ($VerboseOutput) { Write-Console "Processing drive: $($drive.Name)" }
     
     try {
         # Get all files recursively
         $allFiles = Get-FilesRecursively -DriveId $drive.Id -MaxDepth $MaxDepth
         
         if ($allFiles.Count -eq 0) {
-            Write-Host "No files found in drive: $($drive.Name)" -ForegroundColor Yellow
+            Write-Console "No files found in drive: $($drive.Name)"
             continue
         }
         
@@ -263,11 +303,11 @@ foreach ($drive in $drives) {
             $processedFiles++
             
             if ($VerboseOutput) { 
-                Write-Host "Checking file: $($file.Name) ($fileCount/$($allFiles.Count))" -ForegroundColor Gray 
+                Write-Console "Checking file: $($file.Name) ($fileCount/$($allFiles.Count))"
             } else {
                 # Show progress for non-verbose mode
                 if ($fileCount % 10 -eq 0) {
-                    Write-Host "Processed $fileCount/$($allFiles.Count) files in $($drive.Name)..." -ForegroundColor Green
+                    Write-Console "Processed $fileCount/$($allFiles.Count) files in $($drive.Name)..."
                 }
             }
             
@@ -321,34 +361,35 @@ foreach ($drive in $drives) {
                         })
                         
                         if ($VerboseOutput) {
-                            Write-Host ("Permission details for $($file.Name): " + ($perm | ConvertTo-Json -Depth 10)) -ForegroundColor DarkGray
+                            Write-Console ("Permission details for $($file.Name): " + ($perm | ConvertTo-Json -Depth 10))
                         }
                     }
                 }
             } catch {
-                Write-Host "Failed to retrieve permissions for file $($file.Name): $_" -ForegroundColor Red
+                Write-Console "Failed to retrieve permissions for file $($file.Name): $_"
                 continue
             }
         }
     } catch {
-        Write-Host "Failed to process drive $($drive.Name): $_" -ForegroundColor Red
+        Write-Console "Failed to process drive $($drive.Name): $_"
         continue
     }
 }
 
 if ($results.Count -eq 0) {
-    Write-Host "No sharing permissions found in this site." -ForegroundColor Yellow
+    Write-Console "No sharing permissions found in this site."
 } else {
     $results | Export-Csv -Path $OutputCsv -NoTypeInformation -Encoding UTF8
-    Write-Host "✅ Export complete. File saved as $OutputCsv" -ForegroundColor Green
+    Write-Console "Export complete. File saved as $OutputCsv"
     
     # Display summary statistics
     $endTime = Get-Date
     $duration = $endTime - $startTime
-    Write-Host "`n📊 Summary Statistics:" -ForegroundColor Cyan
-    Write-Host "• Total files processed: $processedFiles" -ForegroundColor White
-    Write-Host "• Total permissions found: $totalPermissions" -ForegroundColor White
-    Write-Host "• Document libraries scanned: $($drives.Count)" -ForegroundColor White
-    Write-Host "• Processing time: $($duration.TotalMinutes.ToString('F1')) minutes" -ForegroundColor White
-    Write-Host "• Scan timestamp: $($startTime.ToString('yyyy-MM-dd HH:mm:ss'))" -ForegroundColor White
+    Write-Console ""
+    Write-Console "Summary Statistics:"
+    Write-Console "• Total files processed: $processedFiles"
+    Write-Console "• Total permissions found: $totalPermissions"
+    Write-Console "• Document libraries scanned: $($drives.Count)"
+    Write-Console "• Processing time: $($duration.TotalMinutes.ToString('F1')) minutes"
+    Write-Console "• Scan timestamp: $($startTime.ToString('yyyy-MM-dd HH:mm:ss'))"
 }
