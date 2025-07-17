@@ -167,6 +167,14 @@ try {
         
         # Connect using client credentials
         Connect-MgGraph -TenantId $TenantId -ClientSecretCredential $clientCredential -NoWelcome
+     
+        # Verify the connection worked
+        $context = Get-MgContext
+        if (-not $context -or -not $context.Account) {
+            Write-Host "Failed to authenticate with app registration. Please check your ClientId, TenantId, and ClientSecret." -ForegroundColor Red
+            Write-Host "Make sure the app registration has the required permissions (Sites.Read.All, Files.Read.All, User.Read.All) and admin consent is granted." -ForegroundColor Yellow
+            exit 1
+        }
         
         Write-Host "Connected to Microsoft Graph using app registration." -ForegroundColor Green
     } else {
@@ -175,6 +183,17 @@ try {
         Connect-MgGraph -Scopes "Sites.Read.All", "Files.Read.All", "User.Read.All"
         Write-Host "Connected to Microsoft Graph." -ForegroundColor Green
     }
+   # Final verification that we're connected
+    $context = Get-MgContext
+    if (-not $context -or -not $context.Account) {
+        Write-Host "Failed to establish Microsoft Graph connection." -ForegroundColor Red
+        exit 1
+    }
+    
+    if ($VerboseOutput) {
+        Write-Host "Graph context: Account=$($context.Account), Scopes=$($context.Scopes -join ', ')" -ForegroundColor DarkGray
+    }
+    
 } catch {
     Write-Host "Failed to connect to Microsoft Graph: $_" -ForegroundColor Red
     exit 1
