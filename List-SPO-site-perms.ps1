@@ -365,14 +365,39 @@ try {
             exit 1
         }
         
-    # Disconnect any existing sessions - Enhanced version
-    try { 
-        Write-Log "Disconnecting any existing Microsoft Graph sessions..." "INFO"
-        Disconnect-MgGraph -ErrorAction Stop
-        Write-Log "Existing session disconnected successfully" "INFO"
-    } catch { 
-        Write-Log "No existing session to disconnect (this is normal)" "INFO"
+      # Disconnect any existing sessions
+        try { 
+            Disconnect-MgGraph -ErrorAction SilentlyContinue 
+        } catch { 
+            # Ignore disconnect errors
         }
+        
+        # Connect using client credentials with detailed error handling
+        try {
+            Write-Output "Attempting connection to Microsoft Graph..."
+            Connect-MgGraph -TenantId $TenantId -ClientSecretCredential $clientCredential -NoWelcome -ErrorAction Stop
+            Write-Output "✓ Connect-MgGraph command executed successfully"
+        } catch {
+            # ... error handling code ...
+        }
+        
+        # Verify the connection worked
+        Write-Output "Verifying connection context..."
+        $context = Get-MgContext
+        if (-not $context -or -not $context.Account) {
+            Write-Output "✗ Authentication failed - no valid context found"
+            Write-Output "Context details: $($context | ConvertTo-Json -Depth 2)"
+            Write-Output "`nThis usually indicates:"
+            Write-Output "1. The app registration lacks required APPLICATION permissions"
+            Write-Output "2. Admin consent has not been granted"
+            Write-Output "3. Permissions haven't propagated yet (wait 5-10 minutes)"
+            exit 1
+        }
+        
+        Write-Output "✓ Connection context verified"
+        Write-Output "Account: $($context.Account)"
+        Write-Output "AuthType: $($context.AuthType)"
+        Write-Output "TenantId: $($context.TenantId)"
 
 # Add a small delay to ensure cleanup
 Start-Sleep -Seconds 1
