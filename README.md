@@ -50,7 +50,17 @@ NOTES
     Requires Microsoft.Graph PowerShell module
     Requires Sites.Read.All, Files.Read.All, User.Read.All permissions
     
-    Authentication Methods (in order of preference):
-    1. Global token ($global:graphAPIToken) - Uses existing access token
-    2. App registration (ClientId, TenantId, ClientSecret) - Non-interactive
-    3. Interactive authentication - Prompts for user login
+     Authentication Methods:
+    1. App registration (ClientId, TenantId, ClientSecret) - Non-interactive, optionally uses existing global token
+    2. Interactive authentication - Prompts for user login
+    
+    Global Token Usage:
+    - If $global:graphAPIToken is set, it will be used with app registration authentication
+    - This allows reusing existing tokens without separate authentication flows
+    
+    Troubleshooting App Registration Issues:
+    - Ensure APPLICATION permissions are granted (not delegated)
+    - Admin consent must be granted for all permissions
+    - Wait 5-10 minutes after granting consent for permissions to propagate
+    - Verify the app registration is in the correct tenant
+    - Check that the client secret hasn't expired
