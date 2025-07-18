@@ -62,10 +62,13 @@
     Requires Microsoft.Graph PowerShell module
     Requires Sites.Read.All, Files.Read.All, User.Read.All permissions
     
-    Authentication Methods (in order of preference):
-    1. Global token ($global:graphAPIToken) - Uses existing access token
-    2. App registration (ClientId, TenantId, ClientSecret) - Non-interactive
-    3. Interactive authentication - Prompts for user login
+    Authentication Methods:
+    1. App registration (ClientId, TenantId, ClientSecret) - Non-interactive, optionally uses existing global token
+    2. Interactive authentication - Prompts for user login
+    
+    Global Token Usage:
+    - If $global:graphAPIToken is set, it will be used with app registration authentication
+    - This allows reusing existing tokens without separate authentication flows
     
     Troubleshooting App Registration Issues:
     - Ensure APPLICATION permissions are granted (not delegated)
@@ -332,15 +335,15 @@ Import-Module Microsoft.Graph
 try {
     Write-Log "Starting authentication process..." "INFO"
     
-    # Check authentication methods in order of preference
+    # Check if existing global token is available
     if ($global:graphAPIToken) {
-        # Method 1: Use existing global token
-        Write-Log "Connecting to Microsoft Graph using existing token..." "INFO"
+        Write-Log "Found existing global token, will use it for authentication" "INFO"
         $secureToken = ConvertTo-SecureString $global:graphAPIToken -AsPlainText -Force
-        Connect-MgGraph -AccessToken $secureToken -NoWelcome
-        Write-Log "Connected to Microsoft Graph using existing token" "SUCCESS"
-    } elseif ($ClientId -and $TenantId -and $ClientSecret) {
-        # Method 2: App registration with client secret
+    }
+    
+    # Check authentication methods
+    if ($ClientId -and $TenantId -and $ClientSecret) {
+        # Method 1: App registration with client secret (optionally using existing token)
         Write-Log "Connecting to Microsoft Graph using app registration..." "INFO"
         Write-Log "Client ID: $ClientId" "INFO"
         Write-Log "Tenant ID: $TenantId" "INFO"
@@ -362,15 +365,6 @@ try {
             exit 1
         }
         
-        # Convert client secret to secure string
-        try {
-            $secureClientSecret = ConvertTo-SecureString $ClientSecret -AsPlainText -Force
-            $clientCredential = New-Object System.Management.Automation.PSCredential($ClientId, $secureClientSecret)
-        } catch {
-            Write-Log "Failed to create credentials: $_" "ERROR"
-            exit 1
-        }
-        
         # Disconnect any existing sessions
         try { 
             Disconnect-MgGraph -ErrorAction SilentlyContinue 
@@ -378,10 +372,20 @@ try {
             # Ignore disconnect errors
         }
         
-        # Connect using client credentials with detailed error handling
+        # Connect using existing token if available, otherwise use client credentials
         try {
             Write-Log "Attempting connection to Microsoft Graph..." "INFO"
-            Connect-MgGraph -TenantId $TenantId -ClientSecretCredential $clientCredential -NoWelcome -ErrorAction Stop
+            
+            if ($global:graphAPIToken) {
+                Write-Log "Using existing global token for connection" "INFO"
+                Connect-MgGraph -AccessToken $secureToken -NoWelcome -ErrorAction Stop
+            } else {
+                Write-Log "Using client credentials for connection" "INFO"
+                $secureClientSecret = ConvertTo-SecureString $ClientSecret -AsPlainText -Force
+                $clientCredential = New-Object System.Management.Automation.PSCredential($ClientId, $secureClientSecret)
+                Connect-MgGraph -TenantId $TenantId -ClientSecretCredential $clientCredential -NoWelcome -ErrorAction Stop
+            }
+            
             Write-Log "Connect-MgGraph command executed successfully" "SUCCESS"
         } catch {
             Write-Log "Connect-MgGraph failed: $($_.Exception.Message)" "ERROR"
@@ -434,7 +438,7 @@ try {
         Write-Log "App registration authentication fully verified" "SUCCESS"
         
     } else {
-        # Method 3: Interactive authentication
+        # Method 2: Interactive authentication
         Write-Log "Connecting to Microsoft Graph interactively..." "INFO"
         Connect-MgGraph -Scopes "Sites.Read.All", "Files.Read.All", "User.Read.All"
         Write-Log "Connected to Microsoft Graph interactively" "SUCCESS"
