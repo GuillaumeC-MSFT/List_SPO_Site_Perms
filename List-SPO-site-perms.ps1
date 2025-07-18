@@ -338,7 +338,6 @@ try {
     # Check if existing global token is available
     if ($global:graphAPIToken) {
         Write-Log "Found existing global token, will use it for authentication" "INFO"
-        $secureToken = ConvertTo-SecureString $global:graphAPIToken -AsPlainText -Force
     }
     
     # Check authentication methods
@@ -365,49 +364,18 @@ try {
             exit 1
         }
         
-      # Disconnect any existing sessions
+        # Disconnect any existing sessions
+        Write-Log "Disconnecting any existing Microsoft Graph sessions..." "INFO"
         try { 
+            $existingContext = Get-MgContext
+            if ($existingContext) {
+                Write-Log "Found existing context: TenantId=$($existingContext.TenantId), AuthType=$($existingContext.AuthType)" "INFO"
+            }
             Disconnect-MgGraph -ErrorAction SilentlyContinue 
+            Write-Log "Existing session disconnected successfully" "INFO"
         } catch { 
-            # Ignore disconnect errors
+            Write-Log "No existing session to disconnect" "INFO"
         }
-        
-        # Connect using client credentials with detailed error handling
-        try {
-            Write-Output "Attempting connection to Microsoft Graph..."
-            Connect-MgGraph -TenantId $TenantId -ClientSecretCredential $clientCredential -NoWelcome -ErrorAction Stop
-            Write-Output "✓ Connect-MgGraph command executed successfully"
-        } catch {
-            # ... error handling code ...
-        }
-        
-        # Verify the connection worked
-        Write-Output "Verifying connection context..."
-        $context = Get-MgContext
-        if (-not $context -or -not $context.Account) {
-            Write-Output "✗ Authentication failed - no valid context found"
-            Write-Output "Context details: $($context | ConvertTo-Json -Depth 2)"
-            Write-Output "`nThis usually indicates:"
-            Write-Output "1. The app registration lacks required APPLICATION permissions"
-            Write-Output "2. Admin consent has not been granted"
-            Write-Output "3. Permissions haven't propagated yet (wait 5-10 minutes)"
-            exit 1
-        }
-        
-        Write-Output "✓ Connection context verified"
-        Write-Output "Account: $($context.Account)"
-        Write-Output "AuthType: $($context.AuthType)"
-        Write-Output "TenantId: $($context.TenantId)"
-
-# Add a small delay to ensure cleanup
-Start-Sleep -Seconds 1
-
-# Clear any cached authentication state
-try {
-    Clear-MgContext -ErrorAction SilentlyContinue
-} catch {
-    # Ignore if command doesn't exist in older versions
-}
         
         # Connect using existing token if available, otherwise use client credentials
         try {
@@ -415,6 +383,7 @@ try {
             
             if ($global:graphAPIToken) {
                 Write-Log "Using existing global token for connection" "INFO"
+                $secureToken = ConvertTo-SecureString $global:graphAPIToken -AsPlainText -Force
                 Connect-MgGraph -AccessToken $secureToken -NoWelcome -ErrorAction Stop
             } else {
                 Write-Log "Using client credentials for connection" "INFO"
@@ -442,15 +411,39 @@ try {
         
         # Verify the connection worked
         Write-Log "Verifying connection context..." "INFO"
+        
+        # Add a small delay to ensure context is fully established
+        Start-Sleep -Seconds 2
+        
         $context = Get-MgContext
-        if (-not $context -or -not $context.Account) {
-            Write-Log "Authentication failed - no valid context found" "ERROR"
+        if (-not $context) {
+            Write-Log "Authentication failed - no context found" "ERROR"
+            Write-Log "This usually indicates the connection command failed silently" "ERROR"
+            exit 1
+        }
+        
+        # For app-only authentication, Account might be null, so check AuthType instead
+        if ($context.AuthType -eq "AppOnly" -or $context.AuthType -eq 1) {
+            Write-Log "App-only authentication detected - this is expected for client credentials" "INFO"
+        } elseif (-not $context.Account) {
+            Write-Log "Authentication failed - no account found in context" "ERROR"
+            Write-Log "Context details: $($context | ConvertTo-Json -Depth 2)" "INFO"
             exit 1
         }
         
         Write-Log "Connection context verified successfully" "SUCCESS"
-        Write-Log "Account: $($context.Account)" "INFO"
+        Write-Log "Client ID: $($context.ClientId)" "INFO"
+        Write-Log "Tenant ID: $($context.TenantId)" "INFO"
         Write-Log "AuthType: $($context.AuthType)" "INFO"
+        Write-Log "App Name: $($context.AppName)" "INFO"
+        
+        # For app-only auth, display relevant info
+        if ($context.AuthType -eq "AppOnly" -or $context.AuthType -eq 1) {
+            Write-Log "Authentication method: Application (App-Only)" "INFO"
+            Write-Log "Token type: $($context.TokenCredentialType)" "INFO"
+        } else {
+            Write-Log "Account: $($context.Account)" "INFO"
+        }
         
         # Test basic Graph API access
         Write-Log "Testing basic Graph API access..." "INFO"
@@ -483,8 +476,14 @@ try {
     
     # Final verification
     $context = Get-MgContext
-    if (-not $context -or -not $context.Account) {
+    if (-not $context) {
         Write-Log "Failed to establish Microsoft Graph connection" "ERROR"
+        exit 1
+    }
+    
+    # For app-only authentication, Account might be null, so check AuthType instead
+    if ($context.AuthType -ne "AppOnly" -and $context.AuthType -ne 1 -and -not $context.Account) {
+        Write-Log "Failed to establish Microsoft Graph connection - no account found" "ERROR"
         exit 1
     }
     
