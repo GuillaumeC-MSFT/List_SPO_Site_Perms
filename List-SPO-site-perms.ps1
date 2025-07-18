@@ -448,7 +448,7 @@ try {
         # Test basic Graph API access
         Write-Log "Testing basic Graph API access..." "INFO"
         try {
-            $profile = Get-MgProfile -ErrorAction Stop
+            $profile = Get-MgUser -Top 1 -ErrorAction Stop
             Write-Log "Basic Graph API access: SUCCESS" "SUCCESS"
         } catch {
             Write-Log "Basic Graph API access: FAILED - $_" "ERROR"
