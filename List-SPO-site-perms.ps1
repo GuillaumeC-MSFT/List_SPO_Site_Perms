@@ -365,12 +365,24 @@ try {
             exit 1
         }
         
-        # Disconnect any existing sessions
-        try { 
-            Disconnect-MgGraph -ErrorAction SilentlyContinue 
-        } catch { 
-            # Ignore disconnect errors
+    # Disconnect any existing sessions - Enhanced version
+    try { 
+        Write-Log "Disconnecting any existing Microsoft Graph sessions..." "INFO"
+        Disconnect-MgGraph -ErrorAction Stop
+        Write-Log "Existing session disconnected successfully" "INFO"
+    } catch { 
+        Write-Log "No existing session to disconnect (this is normal)" "INFO"
         }
+
+# Add a small delay to ensure cleanup
+Start-Sleep -Seconds 1
+
+# Clear any cached authentication state
+try {
+    Clear-MgContext -ErrorAction SilentlyContinue
+} catch {
+    # Ignore if command doesn't exist in older versions
+}
         
         # Connect using existing token if available, otherwise use client credentials
         try {
