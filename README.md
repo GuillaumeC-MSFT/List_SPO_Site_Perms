@@ -4,8 +4,8 @@ SYNOPSIS
 
 DESCRIPTION
 
-    This script connects to Microsoft Graph and exports all file permissions from a SharePoint site to a CSV file.
-    It processes all document libraries and includes detailed permission information.
+     This script connects to Microsoft Graph and exports all file permissions from a SharePoint site to a CSV file.
+     It processes all document libraries with detailed permission information, rate limiting, retry logic, and comprehensive error handling.
 
 PARAMETER SiteUrl
 
@@ -18,6 +18,14 @@ PARAMETER OutputCsv
 PARAMETER VerboseOutput
 
     Enable verbose output for detailed processing information
+
+PARAMETER EnableLogging
+
+    Enable logging to file
+    
+PARAMETER LogFile
+
+    Log file path (default: SPO-Permissions-Log.txt)  
 
 PARAMETER IncludeSystemFiles
 
